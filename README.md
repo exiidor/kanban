@@ -8,6 +8,7 @@ A fully-featured, single-page kanban board application built with vanilla JavaSc
 - **Multiple Boards**: Create and switch between unlimited boards
 - **Board Workflow**: Each board has TODO, In Progress, and Done columns
 - **Board Descriptions**: Add context to each board
+- **Custom Columns**: Future enhancement for user-defined columns
 
 ### Card Management
 - **Complete Card Details**:
@@ -214,57 +215,17 @@ Requires JavaScript enabled. No server or build tools needed.
 - **LocalStorage**: Browser stores data from localStorage automatically (accessible via DevTools → Application → LocalStorage)
 - **JSON File**: data.json in same directory as index.html
 
-## Customization
-
-### Add More Team Members
-Edit `data.json` → Add to `people` array:
-```json
-{
-  "id": "p-6",
-  "name": "Frank Wilson",
-  "initials": "FW"
-}
-```
-
-### Add Projects
-Edit `data.json` → Add to `projects` array:
-```json
-{
-  "id": "proj-5",
-  "name": "Mobile App"
-}
-```
-
-### Modify Colors
-Edit `script.js` or `index.html` CSS:
-- `.priority-high` → Change background color
-- `.tag` → Modify tag styling
-- `.column-drag-over` → Change drag-over feedback color
-
-### Change Column Names
-Edit `script.js`:
-```javascript
-const COLUMNS = ['TODO', 'In Progress', 'Done'];
-// Change to any column names you prefer
-```
-
 ## Limitations & Future Enhancements
 
 ### Current Limitations
-- Columns are fixed (TODO/In Progress/Done) — not customizable per board
-- No user authentication (single user, no permissions)
 - No timestamps on card updates (only on comments)
 - No undo/redo history
 
 ### Possible Future Features
-- Custom columns per board
 - Card templates for bulk creation
 - Recurring tasks
 - Time tracking
-- Email notifications
 - Dark mode toggle
 - Card color labels
 - Subtasks
 - Card attachments
-- Multi-user with permissions
-- Server sync
