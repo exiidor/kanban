@@ -52,8 +52,9 @@ async function loadData() {
 
     renderUI();
   } catch (error) {
-    console.error('Error loading data:', error);
-    showToast('Error loading data', 'error');
+    // console.error('Error loading data:', error);
+    // showToast('Error loading data', 'error');
+    showToast('Import your JSON file to load data');
   }
 }
 
