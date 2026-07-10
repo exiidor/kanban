@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Board</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .card-dragging {
+      opacity: 0.5;
+    }
+    .column-drag-over {
+      background-color: rgba(59, 130, 246, 0.1);
+    }
+    .tag {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .priority-high {
+      background-color: #fee2e2;
+      color: #991b1b;
+    }
+    .priority-medium {
+      background-color: #fef3c7;
+      color: #92400e;
+    }
+    .priority-low {
+      background-color: #d1fae5;
+      color: #065f46;
+    }
+    .card {
+      transition: all 0.2s;
+    }
+    .card:hover {
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+    }
+    .card.overdue {
+      border-left: 4px solid #dc2626;
+    }
+    .card.due-soon {
+      border-left: 4px solid #f59e0b;
+    }
+    .blocking-indicator {
+      font-size: 0.75rem;
+      font-weight: 600;
+      background-color: #fecaca;
+      color: #7f1d1d;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      cursor: help;
+    }
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 40;
+    }
+    .modal-backdrop.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 1rem 1.5rem;
+      background-color: #10b981;
+      color: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+      z-index: 50;
+      animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    .toast.error {
+      background-color: #ef4444;
+    }
+    .toast.warn {
+      background-color: #f59e0b;
+    }
+    .truncate-lines {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <div class="w-64 bg-white border-r border-gray-200 flex flex-col">
+      <div class="p-6 border-b border-gray-200">
+        <div class="flex items-center gap-3">
+          <img src="logo.png" alt="Logo" class="w-10 h-10 rounded-full object-cover">
+          <h1 class="text-2xl font-bold text-gray-900">Kanban</h1>
+        </div>
+      </div>
+      
+      <!-- Board List -->
+      <div class="flex-1 overflow-y-auto">
+        <div class="p-4">
+          <h2 class="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Boards</h2>
+          <div id="boardList" class="space-y-2">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+      
+      <!-- Management Section -->
+      <div class="p-4 border-t border-gray-200">
+        <h2 class="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Management</h2>
+        <div class="space-y-2 mb-4">
+          <button id="managePeopleBtn" class="w-full px-3 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm font-medium transition">
+            👥 Manage People
+          </button>
+          <button id="manageProjectsBtn" class="w-full px-3 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm font-medium transition">
+            📋 Manage Projects
+          </button>
+        </div>
+      </div>
+
+      <!-- Data Management -->
+      <div class="p-4 border-t border-gray-200 space-y-2">
+        <button id="newBoardBtn" class="w-full px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium transition">
+          + New Board
+        </button>
+        <button id="importJsonBtn" class="w-full px-3 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm font-medium transition">
+          Import JSON
+        </button>
+        <button id="exportJsonBtn" class="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm font-medium transition">
+          Export JSON
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Top Bar -->
+      <div class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <h2 id="currentBoardTitle" class="text-2xl font-bold text-gray-900">Select a Board</h2>
+          <button id="editBoardBtn" title="Edit board" class="ml-3 text-sm px-2 py-1 border rounded hover:bg-gray-100">Edit</button>
+          <p id="currentBoardDesc" class="text-gray-600 text-sm mt-1"></p>
+        </div>
+        
+        <!-- Search and Filter Controls -->
+        <div class="flex items-center gap-4">
+          <div class="relative">
+            <input 
+              id="searchInput" 
+              type="text" 
+              placeholder="Search cards..." 
+              class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 w-64"
+            >
+          </div>
+          <button id="filterToggleBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+            Filter
+          </button>
+          <button id="resetFiltersBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm">
+            Reset
+          </button>
+          <button id="addColumnBtn" class="px-4 py-2 bg-green-100 text-green-800 border border-green-200 rounded-lg hover:bg-green-200 transition text-sm">
+            + Column
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Panel (Hidden by default) -->
+      <div id="filterPanel" class="bg-gray-50 border-b border-gray-200 px-6 py-4 hidden">
+        <div class="grid grid-cols-5 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-2">Assignee</label>
+            <select id="filterAssignee" class="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-2">Priority</label>
+            <select id="filterPriority" class="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500">
+              <option value="">All</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-2">Project</label>
+            <select id="filterProject" class="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-2">Status</label>
+            <select id="filterStatus" class="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500">
+              <option value="">All</option>
+              <option value="overdue">Overdue</option>
+              <option value="due-soon">Due Soon (3 days)</option>
+              <option value="no-due">No Due Date</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-2">Tags</label>
+            <input id="filterTags" type="text" placeholder="Comma-separated" class="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+      </div>
+
+      <!-- Kanban Columns -->
+      <div class="flex-1 overflow-x-auto bg-gray-100 p-6">
+        <div id="boardColumns" class="flex gap-6 h-full min-w-min">
+          <!-- Dynamically populated with columns -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Card Modal -->
+  <div id="newCardModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-96">
+      <h3 class="text-xl font-bold mb-4">Create New Card</h3>
+      <form id="newCardForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <input type="text" id="newCardTitle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea id="newCardDesc" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 h-20 resize-none"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+            <select id="newCardPriority" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+            <input type="date" id="newCardDueDate" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Assignees (hold Ctrl/Cmd to select multiple)</label>
+          <select id="newCardAssignee" multiple class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 h-28">
+            <!-- options populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Project</label>
+          <select id="newCardProject" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+            <option value="">None</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+          <input type="text" id="newCardTags" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="cancelNewCardBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Card Detail Modal -->
+  <div id="cardDetailModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-2xl max-h-96 overflow-y-auto" style="width: 700px;">
+      <div class="flex justify-between items-start mb-4">
+        <h3 id="cardDetailTitle" class="text-2xl font-bold"></h3>
+        <button id="closeCardDetailBtn" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+      </div>
+
+      <div id="cardDetailContent" class="space-y-4">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+  </div>
+
+  <!-- New Column Modal -->
+  <div id="newColumnModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-80">
+      <h3 class="text-xl font-bold mb-4">Add Column</h3>
+      <form id="newColumnForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Column Name</label>
+          <input type="text" id="newColumnName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="cancelNewColumnBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- New Board Modal -->
+  <div id="newBoardModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-96">
+      <h3 class="text-xl font-bold mb-4">Create New Board</h3>
+      <form id="newBoardForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Board Name</label>
+          <input type="text" id="newBoardName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea id="newBoardDesc" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 h-20 resize-none"></textarea>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="cancelNewBoardBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Board Modal -->
+  <div id="editBoardModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-96">
+      <h3 class="text-xl font-bold mb-4">Edit Board</h3>
+      <form id="editBoardForm" class="space-y-4">
+        <input type="hidden" id="editBoardId">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Board Name</label>
+          <input type="text" id="editBoardName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea id="editBoardDesc" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 h-20 resize-none"></textarea>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="cancelEditBoardBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Card Modal -->
+  <div id="editCardModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-96 max-h-96 overflow-y-auto">
+      <h3 class="text-xl font-bold mb-4">Edit Card</h3>
+      <form id="editCardForm" class="space-y-4">
+        <input type="hidden" id="editCardId">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <input type="text" id="editCardTitle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea id="editCardDesc" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 h-20 resize-none"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+            <select id="editCardPriority" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+            <input type="date" id="editCardDueDate" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Assignees (hold Ctrl/Cmd to select multiple)</label>
+          <select id="editCardAssignee" multiple class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 h-28">
+            <!-- options populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Project</label>
+          <select id="editCardProject" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+            <option value="">None</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+          <input type="text" id="editCardTags" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+        </div>
+        <div class="pt-2 border-t border-gray-200 flex justify-end gap-2">
+          <button type="button" id="cancelEditCardBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+          <button type="button" id="deleteCardBtn" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">Delete</button>
+          <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Relationships Modal -->
+  <div id="relationshipsModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-96">
+      <h3 class="text-xl font-bold mb-4">Card Relationships</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Blocking Cards</label>
+          <p id="blockingCardsList" class="text-sm text-gray-600 mb-2">No blocking cards</p>
+          <select id="blockingCardsSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-sm">
+            <option value="">Select card...</option>
+          </select>
+          <button type="button" id="addBlockerBtn" class="mt-2 w-full px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm">
+            Add Blocker
+          </button>
+        </div>
+        <div class="border-t pt-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Blocked By Cards</label>
+          <p id="blockedByCardsList" class="text-sm text-gray-600 mb-2">Not blocked by any cards</p>
+          <select id="blockedByCardsSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-sm">
+            <option value="">Select card...</option>
+          </select>
+          <button type="button" id="addBlockedByBtn" class="mt-2 w-full px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm">
+            Add Blocked By
+          </button>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+        <button id="closeRelationshipsBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage People Modal -->
+  <div id="managePeopleModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-96 max-h-96 overflow-y-auto">
+      <h3 class="text-xl font-bold mb-4">Manage People</h3>
+      <div id="peopleList" class="space-y-3 mb-4">
+        <!-- Dynamically populated -->
+      </div>
+      <form id="newPersonForm" class="border-t pt-4 space-y-2">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <input type="text" id="newPersonName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Initials</label>
+          <input type="text" id="newPersonInitials" maxlength="3" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-sm" placeholder="e.g., AJ">
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="closePeopleModalBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm">Close</button>
+          <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm">Add Person</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Manage Projects Modal -->
+  <div id="manageProjectsModal" class="modal-backdrop">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-96 max-h-96 overflow-y-auto">
+      <h3 class="text-xl font-bold mb-4">Manage Projects</h3>
+      <div id="projectsList" class="space-y-3 mb-4">
+        <!-- Dynamically populated -->
+      </div>
+      <form id="newProjectForm" class="border-t pt-4 space-y-2">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+          <input type="text" id="newProjectName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-sm">
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="closeProjectsModalBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm">Close</button>
+          <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm">Add Project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
