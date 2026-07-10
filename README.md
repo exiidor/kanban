@@ -2,6 +2,8 @@
 
 A fully-featured, single-page kanban board application built with vanilla JavaScript, HTML, and Tailwind CSS. All data is managed in a single JSON file that syncs with browser localStorage.
 
+<img width="1919" height="1015" alt="image" src="https://github.com/user-attachments/assets/7a85be6c-c321-4944-9da0-ee534df5bd6e" />
+
 ## Features
 
 ### Board Management
