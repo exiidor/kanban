@@ -15,7 +15,8 @@ let appState = {
     tags: []
   },
   selectedCardId: null,
-  draggedCardId: null
+  draggedCardId: null,
+  activeTargetColumn: null
 };
 
 const COLUMNS = ['TODO', 'In Progress', 'Done'];
@@ -416,6 +417,7 @@ function createNewCard(column) {
     title,
     description: document.getElementById('newCardDesc').value.trim(),
     board_id: appState.currentBoardId,
+    status: column,
     // support multiple assignees
     assignees: Array.from(document.getElementById('newCardAssignee').selectedOptions).map(o => o.value).filter(v => v),
     tags: document.getElementById('newCardTags').value.split(',').map(t => t.trim()).filter(t => t),
@@ -564,6 +566,7 @@ function hasCircularDependency(blockerId, blockedId) {
 // ============================================================================
 
 function openNewCardModal(column) {
+  appState.activeTargetColumn = column;
   document.getElementById('newCardModal').classList.add('show');
   document.getElementById('newCardTitle').focus();
 }
@@ -1194,7 +1197,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cancelNewCardBtn').addEventListener('click', closeNewCardModal);
   document.getElementById('newCardForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const column = document.querySelector('.column-droppable')?.dataset?.column || 'TODO';
+    const column = appState.activeTargetColumn || 'TODO';
     createNewCard(column);
   });
 
