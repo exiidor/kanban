@@ -190,6 +190,8 @@ function renderCurrentBoard() {
   const columnsContainer = document.getElementById('boardColumns');
   columnsContainer.innerHTML = '';
 
+  columnsContainer.addEventListener('dragleave', () => clearInterval(autoScrollInterval));
+
   const columns = Array.isArray(board.columns) && board.columns.length > 0 ? board.columns : COLUMNS;
   columns.forEach(column => {
     const columnDiv = document.createElement('div');
@@ -483,14 +485,42 @@ function createNewBoard() {
 // Drag and Drop
 // ============================================================================
 
+let autoScrollInterval = null; // Tracks the scrolling loop
+
 function handleDragOver(e) {
   e.preventDefault();
   e.target.closest('.column-droppable')?.classList.add('column-drag-over');
+
+  const container = document.getElementById('boardColumns');
+  if (!container) return;
+
+  const threshold = 120; // Distance (in px) from edge to start scrolling
+  const scrollSpeed = 12; // How fast it scrolls (px per frame)
+  const rect = container.getBoundingClientRect();
+  const mouseX = e.clientX;
+
+  // Clear any existing scroll loop so they don't stack up
+  clearInterval(autoScrollInterval);
+
+  if (mouseX > rect.right - threshold) {
+    // Mouse is near the right edge -> Scroll Right
+    autoScrollInterval = setInterval(() => {
+      container.scrollLeft += scrollSpeed;
+    }, 16); // ~60fps smooth scrolling
+  } else if (mouseX < rect.left + threshold) {
+    // Mouse is near the left edge -> Scroll Left
+    autoScrollInterval = setInterval(() => {
+      container.scrollLeft -= scrollSpeed;
+    }, 16);
+  }
 }
 
 function handleDrop(e, column) {
   e.preventDefault();
   e.target.closest('.column-droppable')?.classList.remove('column-drag-over');
+  
+  // CRITICAL: Stop scrolling immediately when card is dropped
+  clearInterval(autoScrollInterval);
 
   if (!appState.draggedCardId) return;
 
