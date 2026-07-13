@@ -1409,6 +1409,18 @@ document.addEventListener('DOMContentLoaded', () => {
     openManageProjectsModal();
   });
 
+  const actionsMenuBtn = document.getElementById("actionsMenuBtn");
+  const actionsMenu = document.getElementById("actionsMenu");
+
+  actionsMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      actionsMenu.classList.toggle("hidden");
+  });
+
+  document.addEventListener("click", () => {
+      actionsMenu.classList.add("hidden");
+  });
+
   // New column modal handlers
   const addColumnBtn = document.getElementById('addColumnBtn');
   if (addColumnBtn) addColumnBtn.addEventListener('click', openNewColumnModal);
