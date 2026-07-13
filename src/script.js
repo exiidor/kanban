@@ -221,13 +221,36 @@ function renderCurrentBoard() {
     const headerDiv = document.createElement('div');
     headerDiv.className = 'flex items-center justify-between mb-4';
 
+
+    const titleAndEditDiv = document.createElement('div');  
+    titleAndEditDiv.className = 'flex items-center gap-0';
+
     const titleEl = document.createElement('h3');
     titleEl.className = 'font-bold text-gray-900';
     titleEl.textContent = column;
-    headerDiv.appendChild(titleEl);
+    titleAndEditDiv.appendChild(titleEl);
+
+    const editColBtn = document.createElement('button');
+    editColBtn.className = 'text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded';
+    editColBtn.title = 'Edit column';
+    editColBtn.innerHTML = '✎';
+    editColBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newName = prompt('Enter new column name:', column);
+      if (newName && newName.trim() && newName.trim() !== column) {
+        renameColumn(column, newName.trim());
+      }
+    });
+    titleAndEditDiv.appendChild(editColBtn);
+
+    headerDiv.appendChild(titleAndEditDiv);
 
     const controlsDiv = document.createElement('div');
     controlsDiv.className = 'flex items-center gap-1';
+
+    //----------------------
+    // Arrows
+    //----------------------
 
     const colIndex = columns.indexOf(column);
     
@@ -1028,6 +1051,30 @@ function populateFilterDropdowns() {
 // ============================================================================
 // Utility Functions
 // ============================================================================
+
+function renameColumn(oldName, newName) {
+  const board = appState.boards.find(b => b.id === appState.currentBoardId);
+  if (!board) return showToast('No board selected', 'warn');
+  
+  board.columns = board.columns || [...COLUMNS];
+
+  const colIndex = board.columns.indexOf(oldName);
+  if (colIndex !== -1) {
+    board.columns[colIndex] = newName;
+  } else {
+    return showToast('Column not found', 'error');
+  }
+
+  appState.cards.forEach(card => {
+    if (card.board_id === board.id && card.status === oldName) {
+      card.status = newName;
+    }
+  });
+
+  saveToLocalStorage();
+  renderCurrentBoard();
+  showToast(`Column renamed to "${newName}"`);
+}
 
 function isDueDate(dueDate) {
   if (!dueDate) return { overdue: false, duesSoon: false };
