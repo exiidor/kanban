@@ -65,13 +65,31 @@ function saveToLocalStorage() {
 }
 
 function exportJSON() {
+  const defaultName = `kanban-export-${new Date().toISOString().split('T')[0]}`;
+  let userFilename = prompt("Enter a filename for your export:", defaultName);
+  if (userFilename === null) {
+    return; 
+  }
+  
+  userFilename = userFilename.trim();
+  
+  if (!userFilename) {
+    userFilename = defaultName;
+  }
+  
+  if (!userFilename.toLowerCase().endsWith('.json')) {
+    userFilename += '.json';
+  }
+
   const dataStr = JSON.stringify(appState, null, 2);
   const dataBlob = new Blob([dataStr], { type: 'application/json' });
   const url = URL.createObjectURL(dataBlob);
   const link = document.createElement('a');
+  
   link.href = url;
-  link.download = `kanban-export-${new Date().toISOString().split('T')[0]}.json`;
+  link.download = userFilename;
   link.click();
+  
   URL.revokeObjectURL(url);
   showToast('Data exported successfully');
 }
