@@ -421,6 +421,25 @@ function getCardStatus(card) {
   return card.status || 'TODO';
 }
 
+function isCardBlocked(cardId, targetColumnName) {
+  const board = appState.boards.find(b => b.id === appState.currentBoardId);
+  if (!board) return false;
+  const columnsOrder = Array.isArray(board.columns) && board.columns.length > 0 ? board.columns : COLUMNS;
+  
+  const targetColumnIndex = columnsOrder.indexOf(targetColumnName);
+
+  const blockedByRels = appState.relationships.filter(r => r.blocked_id === cardId);
+  
+  return blockedByRels.some(rel => {
+    const blockerCard = appState.cards.find(c => c.id === rel.blocker_id);
+    if (!blockerCard) return false;
+
+    const blockerColumnName = blockerCard.status || 'TODO';
+    const blockerColumnIndex = columnsOrder.indexOf(blockerColumnName);
+    return targetColumnIndex > blockerColumnIndex;
+  });
+}
+
 // ============================================================================
 // Card Operations
 // ============================================================================
@@ -507,26 +526,30 @@ let autoScrollInterval = null; // Tracks the scrolling loop
 
 function handleDragOver(e) {
   e.preventDefault();
-  e.target.closest('.column-droppable')?.classList.add('column-drag-over');
+  
+  const columnDroppable = e.target.closest('.column-droppable');
+  const targetColumn = columnDroppable?.dataset.column;
 
+  if (appState.draggedCardId && targetColumn && isCardBlocked(appState.draggedCardId, targetColumn)) {
+    columnDroppable?.classList.remove('column-drag-over');
+  } else {
+    columnDroppable?.classList.add('column-drag-over');
+  }
   const container = document.getElementById('boardColumns');
   if (!container) return;
 
-  const threshold = 120; // Distance (in px) from edge to start scrolling
-  const scrollSpeed = 12; // How fast it scrolls (px per frame)
+  const threshold = 120;
+  const scrollSpeed = 12;
   const rect = container.getBoundingClientRect();
   const mouseX = e.clientX;
 
-  // Clear any existing scroll loop so they don't stack up
   clearInterval(autoScrollInterval);
 
   if (mouseX > rect.right - threshold) {
-    // Mouse is near the right edge -> Scroll Right
     autoScrollInterval = setInterval(() => {
       container.scrollLeft += scrollSpeed;
-    }, 16); // ~60fps smooth scrolling
+    }, 16);
   } else if (mouseX < rect.left + threshold) {
-    // Mouse is near the left edge -> Scroll Left
     autoScrollInterval = setInterval(() => {
       container.scrollLeft -= scrollSpeed;
     }, 16);
@@ -537,12 +560,16 @@ function handleDrop(e, column) {
   e.preventDefault();
   e.target.closest('.column-droppable')?.classList.remove('column-drag-over');
   
-  // CRITICAL: Stop scrolling immediately when card is dropped
   clearInterval(autoScrollInterval);
 
   if (!appState.draggedCardId) return;
 
-  // Update card status to match the column it was dropped into
+  if (isCardBlocked(appState.draggedCardId, column)) {
+    showToast('Cannot move card: It cannot bypass its blocker tasks layout position!', 'error');
+    renderCurrentBoard(); 
+    return;
+  }
+
   const cardIdx = appState.cards.findIndex(c => c.id === appState.draggedCardId);
   if (cardIdx !== -1) {
     appState.cards[cardIdx].status = column;
