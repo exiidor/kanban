@@ -21,6 +21,35 @@ let appState = {
 
 const COLUMNS = ['TODO', 'In Progress', 'Done'];
 const STORAGE_KEY = 'kanban-app-state';
+const THEME_STORAGE_KEY = 'kanban-theme';
+
+// ============================================================================
+// Dark Mode
+// ============================================================================
+
+function applyTheme(isDark) {
+  document.documentElement.classList.toggle('dark', isDark);
+  const toggle = document.getElementById('darkModeToggle');
+  if (toggle) {
+    toggle.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+  }
+}
+
+function initDarkMode() {
+  // index.html already applies the initial theme synchronously (to avoid a
+  // flash), so just sync the button label to whatever is currently active.
+  const isDark = document.documentElement.classList.contains('dark');
+  applyTheme(isDark);
+
+  const toggle = document.getElementById('darkModeToggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const nowDark = !document.documentElement.classList.contains('dark');
+      applyTheme(nowDark);
+      localStorage.setItem(THEME_STORAGE_KEY, nowDark ? 'dark' : 'light');
+    });
+  }
+}
 
 // ============================================================================
 // Data Loading & Persistence
@@ -1308,6 +1337,8 @@ function addCommentToCard(cardId, author, text) {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+  initDarkMode();
+
   // Modal triggers
   document.getElementById('newBoardBtn').addEventListener('click', openNewBoardModal);
   document.getElementById('cancelNewBoardBtn').addEventListener('click', closeNewBoardModal);
