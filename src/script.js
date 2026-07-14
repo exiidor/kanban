@@ -22,6 +22,7 @@ let appState = {
 const COLUMNS = ['TODO', 'In Progress', 'Done'];
 const STORAGE_KEY = 'kanban-app-state';
 const THEME_STORAGE_KEY = 'kanban-theme';
+const FOCUS_STORAGE_KEY = 'kanban-focus-mode';
 
 // ============================================================================
 // Dark Mode
@@ -47,6 +48,31 @@ function initDarkMode() {
       const nowDark = !document.documentElement.classList.contains('dark');
       applyTheme(nowDark);
       localStorage.setItem(THEME_STORAGE_KEY, nowDark ? 'dark' : 'light');
+    });
+  }
+}
+
+// ============================================================================
+// Focus Mode
+// ============================================================================
+
+function applyFocusMode(isFocused) {
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('focusModeToggle');
+  if (sidebar) sidebar.classList.toggle('hidden', isFocused);
+  if (toggle) toggle.textContent = isFocused ? '🎯 Exit Focus Mode' : '🎯 Focus Mode';
+}
+
+function initFocusMode() {
+  const stored = localStorage.getItem(FOCUS_STORAGE_KEY) === 'true';
+  applyFocusMode(stored);
+
+  const toggle = document.getElementById('focusModeToggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const nowFocused = !document.getElementById('sidebar').classList.contains('hidden');
+      applyFocusMode(nowFocused);
+      localStorage.setItem(FOCUS_STORAGE_KEY, nowFocused ? 'true' : 'false');
     });
   }
 }
@@ -1338,6 +1364,7 @@ function addCommentToCard(cardId, author, text) {
 
 document.addEventListener('DOMContentLoaded', () => {
   initDarkMode();
+  initFocusMode();
 
   // Modal triggers
   document.getElementById('newBoardBtn').addEventListener('click', openNewBoardModal);
