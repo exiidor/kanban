@@ -263,15 +263,11 @@ function renderCurrentBoard() {
   const columnsContainer = document.getElementById('boardColumns');
   columnsContainer.innerHTML = '';
 
-  columnsContainer.addEventListener('dragleave', () => clearInterval(autoScrollInterval));
-
   const columns = Array.isArray(board.columns) && board.columns.length > 0 ? board.columns : COLUMNS;
   columns.forEach(column => {
     const columnDiv = document.createElement('div');
     columnDiv.className = 'flex-shrink-0 w-80 bg-gray-200 rounded-lg p-4 column-droppable transition';
     columnDiv.dataset.column = column;
-    columnDiv.addEventListener('dragover', handleDragOver);
-    columnDiv.addEventListener('drop', (e) => handleDrop(e, column));
 
     const headerDiv = document.createElement('div');
     headerDiv.className = 'flex items-center justify-between mb-4';
@@ -373,8 +369,7 @@ function renderCurrentBoard() {
 
 function createCardElement(card) {
   const cardEl = document.createElement('div');
-  cardEl.className = 'card bg-white rounded-lg shadow p-3 cursor-move hover:shadow-lg transition';
-  cardEl.draggable = true;
+  cardEl.className = 'card bg-white rounded-lg shadow p-3 hover:shadow-lg transition';
   cardEl.dataset.cardId = card.id;
 
   if (isDueDate(card.due_date).overdue) {
@@ -414,15 +409,11 @@ function createCardElement(card) {
     </div>
   `;
 
-  cardEl.addEventListener('dragstart', (e) => {
-    appState.draggedCardId = card.id;
-    cardEl.classList.add('card-dragging');
+  cardEl.addEventListener('mousedown', (e) => startCardDrag(e, card.id, cardEl));
+  cardEl.addEventListener('click', () => {
+    if (cardEl.dataset.justDragged) return;
+    openCardDetailModal(card.id);
   });
-  cardEl.addEventListener('dragend', () => {
-    cardEl.classList.remove('card-dragging');
-    appState.draggedCardId = null;
-  });
-  cardEl.addEventListener('click', () => openCardDetailModal(card.id));
 
   return cardEl;
 }
@@ -599,52 +590,159 @@ function createNewBoard() {
 // ============================================================================
 // Drag and Drop
 // ============================================================================
+// Implemented with plain mouse events instead of the native HTML5 Drag and
+// Drop API. Native drag-and-drop puts the browser into an OS-level drag
+// session which suppresses wheel/scroll input for the duration of the drag -
+// that's why the scroll wheel didn't work while dragging a card. A custom
+// mouse-driven drag avoids that entirely.
+//
+// All the expensive work (hit-testing, class toggling, auto-scroll) is
+// batched into a single requestAnimationFrame loop rather than running once
+// per raw mousemove event, since mousemove can fire much faster than the
+// screen refreshes and doing full DOM/layout work on every single event is
+// what caused the dragging lag.
 
-let autoScrollInterval = null; // Tracks the scrolling loop
+let customDrag = null; // Tracks the in-progress custom drag, if any
+let dragRAF = null; // requestAnimationFrame handle for the drag loop
 
-function handleDragOver(e) {
-  e.preventDefault();
-  
-  const columnDroppable = e.target.closest('.column-droppable');
-  const targetColumn = columnDroppable?.dataset.column;
+function startCardDrag(e, cardId, cardEl) {
+  if (e.button !== 0) return; // left click only
+  customDrag = {
+    cardId,
+    cardEl,
+    startX: e.clientX,
+    startY: e.clientY,
+    lastX: e.clientX,
+    lastY: e.clientY,
+    offsetX: e.clientX - cardEl.getBoundingClientRect().left,
+    offsetY: e.clientY - cardEl.getBoundingClientRect().top,
+    width: cardEl.getBoundingClientRect().width,
+    moved: false,
+    ghost: null,
+    currentColumn: null,
+    columns: null,
+  };
+  document.addEventListener('mousemove', onCardDragMove);
+  document.addEventListener('mouseup', onCardDragEnd);
+}
 
-  if (appState.draggedCardId && targetColumn && isCardBlocked(appState.draggedCardId, targetColumn)) {
-    columnDroppable?.classList.remove('column-drag-over');
-  } else {
-    columnDroppable?.classList.add('column-drag-over');
+function onCardDragMove(e) {
+  if (!customDrag) return;
+
+  if (!customDrag.moved) {
+    const dx = e.clientX - customDrag.startX;
+    const dy = e.clientY - customDrag.startY;
+    if (Math.hypot(dx, dy) < 5) return; // ignore tiny jitters so clicks still work
+    customDrag.moved = true;
+    appState.draggedCardId = customDrag.cardId;
+    customDrag.cardEl.classList.add('card-dragging');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'grabbing';
+    customDrag.columns = Array.from(document.querySelectorAll('.column-droppable'));
+
+    const ghost = customDrag.cardEl.cloneNode(true);
+    ghost.style.position = 'fixed';
+    ghost.style.top = '0';
+    ghost.style.left = '0';
+    ghost.style.width = customDrag.width + 'px';
+    ghost.style.zIndex = '1000';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.boxShadow = '0 15px 30px rgba(0, 0, 0, 0.3)';
+    ghost.style.willChange = 'transform';
+    ghost.style.transition = 'none';
+    ghost.style.cursor = 'grabbing';
+    ghost.classList.remove('card-dragging');
+    document.body.appendChild(ghost);
+    customDrag.ghost = ghost;
+
+    dragRAF = requestAnimationFrame(runDragFrame);
   }
+
+  // Just record the latest pointer position here - the rAF loop below reads
+  // it and does all the actual (expensive) work, at most once per frame.
+  customDrag.lastX = e.clientX;
+  customDrag.lastY = e.clientY;
+}
+
+function runDragFrame() {
+  if (!customDrag || !customDrag.moved) return;
+
+  const { lastX, lastY } = customDrag;
+
+  customDrag.ghost.style.transform =
+    `translate(${lastX - customDrag.offsetX}px, ${lastY - customDrag.offsetY}px)`;
+
+  const columnDroppable = document.elementFromPoint(lastX, lastY)?.closest('.column-droppable') || null;
+
+  if (columnDroppable !== customDrag.currentColumn) {
+    customDrag.columns.forEach(el => el.classList.remove('column-drag-over'));
+    customDrag.currentColumn = columnDroppable;
+  }
+
+  if (columnDroppable) {
+    const targetColumn = columnDroppable.dataset.column;
+    const blocked = appState.draggedCardId && targetColumn && isCardBlocked(appState.draggedCardId, targetColumn);
+    columnDroppable.classList.toggle('column-drag-over', !blocked);
+  }
+
+  autoScrollBoard(lastX);
+
+  dragRAF = requestAnimationFrame(runDragFrame);
+}
+
+function autoScrollBoard(mouseX) {
   const container = document.getElementById('boardColumns');
   if (!container) return;
 
   const threshold = 120;
   const scrollSpeed = 12;
   const rect = container.getBoundingClientRect();
-  const mouseX = e.clientX;
-
-  clearInterval(autoScrollInterval);
 
   if (mouseX > rect.right - threshold) {
-    autoScrollInterval = setInterval(() => {
-      container.scrollLeft += scrollSpeed;
-    }, 16);
+    container.scrollLeft += scrollSpeed;
   } else if (mouseX < rect.left + threshold) {
-    autoScrollInterval = setInterval(() => {
-      container.scrollLeft -= scrollSpeed;
-    }, 16);
+    container.scrollLeft -= scrollSpeed;
   }
 }
 
-function handleDrop(e, column) {
-  e.preventDefault();
-  e.target.closest('.column-droppable')?.classList.remove('column-drag-over');
-  
-  clearInterval(autoScrollInterval);
+function onCardDragEnd(e) {
+  document.removeEventListener('mousemove', onCardDragMove);
+  document.removeEventListener('mouseup', onCardDragEnd);
+  cancelAnimationFrame(dragRAF);
 
+  if (!customDrag) return;
+
+  if (customDrag.moved) {
+    const draggedEl = customDrag.cardEl;
+    draggedEl.classList.remove('card-dragging');
+    customDrag.ghost?.remove();
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    customDrag.columns.forEach(el => el.classList.remove('column-drag-over'));
+
+    const dropTarget = document.elementFromPoint(e.clientX, e.clientY)?.closest('.column-droppable');
+    if (dropTarget) {
+      handleDrop(dropTarget.dataset.column);
+    }
+
+    // Prevent the upcoming click event (fired after mouseup) from re-opening
+    // the card detail modal right after a drag. Uses the captured `draggedEl`
+    // reference rather than `customDrag` since the latter is set to null
+    // synchronously below, before this timeout runs.
+    draggedEl.dataset.justDragged = 'true';
+    setTimeout(() => delete draggedEl.dataset.justDragged, 0);
+  }
+
+  appState.draggedCardId = null;
+  customDrag = null;
+}
+
+function handleDrop(column) {
   if (!appState.draggedCardId) return;
 
   if (isCardBlocked(appState.draggedCardId, column)) {
     showToast('Cannot move card: It cannot bypass its blocker tasks layout position!', 'error');
-    renderCurrentBoard(); 
+    renderCurrentBoard();
     return;
   }
 
