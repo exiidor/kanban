@@ -60,15 +60,6 @@ A fully-featured, single-page kanban board application built with vanilla JavaSc
   - Import JSON to replace all data
   - Enables backup and version control
 
-## File Structure
-
-```
-kanban/
-├── index.html       # UI structure and styling (Tailwind CSS)
-├── script.js        # All JavaScript logic (550+ lines)
-└── data.json        # Board, card, project, and team data
-```
-
 ## How to Use
 
 ### 1. Open the Application
@@ -216,18 +207,3 @@ Requires JavaScript enabled. No server or build tools needed.
 
 - **LocalStorage**: Browser stores data from localStorage automatically (accessible via DevTools → Application → LocalStorage)
 - **JSON File**: data.json in same directory as index.html
-
-## Limitations & Future Enhancements
-
-### Current Limitations
-- No timestamps on card updates (only on comments)
-- No undo/redo history
-
-### Possible Future Features
-- Card templates for bulk creation
-- Recurring tasks
-- Time tracking
-- Dark mode toggle
-- Card color labels
-- Subtasks
-- Card attachments
